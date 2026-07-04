@@ -83,6 +83,15 @@
 
   main{padding:40px 40px 96px; min-width:0}
   .lede{max-width:72ch}
+  .baseurl{display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    background:var(--surface); border:1px solid var(--line-strong); border-radius:10px;
+    padding:12px 15px; margin:4px 0 26px}
+  .baseurl .k{font:700 10.5px/1 var(--sans); text-transform:uppercase; letter-spacing:.09em;
+    color:var(--accent-ink); background:var(--accent-weak); padding:5px 8px; border-radius:6px; flex:0 0 auto}
+  .baseurl code{font:600 15px/1.4 var(--mono); color:var(--ink); word-break:break-all; flex:1 1 auto}
+  .baseurl .copy-inline{appearance:none; cursor:pointer; border:1px solid var(--line-strong);
+    background:var(--paper); color:var(--body); font:600 11px/1 var(--mono); padding:6px 10px; border-radius:7px; flex:0 0 auto}
+  .baseurl .copy-inline:hover{border-color:var(--accent); color:var(--accent-ink)}
   h1{font-size:34px; line-height:1.12; letter-spacing:-.02em; color:var(--ink); margin:0 0 6px; text-wrap:balance}
   .sub{font-size:17px; color:var(--muted); margin:0 0 24px}
   section{max-width:72ch; padding-top:26px; margin-top:26px; border-top:1px solid var(--line)}
@@ -193,6 +202,11 @@
     <div class="lede">
       <h1>Mangrove Counting API</h1>
       <p class="sub">Submit a field walkthrough video, get back a deduplicated count of unique mangrove trees, an annotated video, and a top-down spatial map. Built for server-to-server integration.</p>
+      <div class="baseurl">
+        <span class="k">Base URL</span>
+        <code>https://cy6erlizard--treegens-motion-memory-web.modal.run</code>
+        <button class="copy-inline" type="button">Copy</button>
+      </div>
     </div>
 
     <section id="ai">
@@ -462,13 +476,18 @@ console.log(<span class="s">"unique trees:"</span>, job.result.unique_count);</p
       root.setAttribute("data-theme",next);
       try{localStorage.setItem(key,next);}catch(e){}
     });
-    document.querySelectorAll("figure.code .copy").forEach(function(btn){
+    function wireCopy(btn,getText){
       btn.addEventListener("click",function(){
-        var pre=btn.closest("figure").querySelector("pre");
-        navigator.clipboard.writeText(pre.innerText).then(function(){
+        navigator.clipboard.writeText(getText()).then(function(){
           var t=btn.textContent; btn.textContent="Copied"; setTimeout(function(){btn.textContent=t;},1200);
         });
       });
+    }
+    document.querySelectorAll("figure.code .copy").forEach(function(btn){
+      wireCopy(btn,function(){return btn.closest("figure").querySelector("pre").innerText;});
+    });
+    document.querySelectorAll(".baseurl .copy-inline").forEach(function(btn){
+      wireCopy(btn,function(){return btn.parentElement.querySelector("code").innerText;});
     });
   })();
 </script>
