@@ -1,0 +1,436 @@
+<title>Treegens Mangrove Counting API</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="REST API reference for the Treegens mangrove video counting service: submit a field video, get a deduplicated unique tree count, an annotated video, and a spatial map.">
+<style>
+  :root{
+    --paper:#ffffff; --surface:#f5f8f4; --raise:#eef3ec;
+    --ink:#132019; --body:#37453d; --muted:#6b7a71;
+    --line:#e0e7df; --line-strong:#cdd8cc;
+    --accent:#157a52; --accent-ink:#0d5c3d; --accent-weak:#e6f2ea;
+    --get:#1f7a8c; --get-weak:#e2f0f2; --post:#b26a00; --post-weak:#f6ecd9;
+    --code-bg:#0e1712; --code-fg:#d8e5db; --code-mut:#6f8a79; --code-line:#1d2b23;
+    --radius:12px;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#0e1512; --surface:#141d18; --raise:#1a241d;
+      --ink:#e9f2ec; --body:#b6c5bc; --muted:#7f9187;
+      --line:#233029; --line-strong:#314137;
+      --accent:#4cc38a; --accent-ink:#7fd8ac; --accent-weak:#15271e;
+      --get:#5bc7d8; --get-weak:#132a2e; --post:#e6a94d; --post-weak:#2a2213;
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#ffffff; --surface:#f5f8f4; --raise:#eef3ec;
+    --ink:#132019; --body:#37453d; --muted:#6b7a71;
+    --line:#e0e7df; --line-strong:#cdd8cc;
+    --accent:#157a52; --accent-ink:#0d5c3d; --accent-weak:#e6f2ea;
+    --get:#1f7a8c; --get-weak:#e2f0f2; --post:#b26a00; --post-weak:#f6ecd9;
+  }
+  :root[data-theme="dark"]{
+    --paper:#0e1512; --surface:#141d18; --raise:#1a241d;
+    --ink:#e9f2ec; --body:#b6c5bc; --muted:#7f9187;
+    --line:#233029; --line-strong:#314137;
+    --accent:#4cc38a; --accent-ink:#7fd8ac; --accent-weak:#15271e;
+    --get:#5bc7d8; --get-weak:#132a2e; --post:#e6a94d; --post-weak:#2a2213;
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{
+    margin:0; background:var(--paper); color:var(--body);
+    font-family:var(--sans); font-size:16px; line-height:1.62;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  a{color:var(--accent-ink); text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:var(--mono); font-size:.9em}
+
+  /* top bar */
+  .topbar{
+    position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:16px;
+    padding:14px 24px; background:color-mix(in srgb,var(--paper) 88%,transparent);
+    backdrop-filter:blur(10px); border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex; align-items:center; gap:10px; font-weight:650; color:var(--ink); letter-spacing:-.01em}
+  .brand svg{display:block}
+  .brand .ver{font:600 11px/1 var(--mono); color:var(--accent-ink); background:var(--accent-weak);
+    padding:4px 7px; border-radius:6px; letter-spacing:.02em}
+  .topbar .base{margin-left:auto; font:500 12.5px/1 var(--mono); color:var(--muted);
+    background:var(--surface); border:1px solid var(--line); padding:8px 11px; border-radius:8px;
+    max-width:46ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .tgl{appearance:none; cursor:pointer; border:1px solid var(--line-strong); background:var(--surface);
+    color:var(--body); width:36px; height:36px; border-radius:9px; display:grid; place-items:center; flex:0 0 auto}
+  .tgl:hover{border-color:var(--accent); color:var(--accent-ink)}
+
+  /* shell */
+  .shell{display:grid; grid-template-columns:248px minmax(0,1fr); gap:0; max-width:1180px; margin:0 auto}
+  nav.side{position:sticky; top:65px; align-self:start; height:calc(100vh - 65px); overflow-y:auto;
+    padding:28px 14px 40px 24px; border-right:1px solid var(--line)}
+  nav.side h4{font:600 11px/1 var(--sans); text-transform:uppercase; letter-spacing:.09em;
+    color:var(--muted); margin:22px 8px 8px}
+  nav.side h4:first-child{margin-top:0}
+  nav.side a{display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px;
+    color:var(--body); font-size:14px; line-height:1.3}
+  nav.side a:hover{background:var(--surface); text-decoration:none}
+  nav.side a.ep{font-family:var(--mono); font-size:12.5px}
+  .m{font:700 9.5px/1 var(--mono); letter-spacing:.04em; padding:3px 5px; border-radius:5px; flex:0 0 auto}
+  .m.get{color:var(--get); background:var(--get-weak)}
+  .m.post{color:var(--post); background:var(--post-weak)}
+
+  main{padding:40px 40px 96px; min-width:0}
+  .lede{max-width:72ch}
+  h1{font-size:34px; line-height:1.12; letter-spacing:-.02em; color:var(--ink); margin:0 0 6px; text-wrap:balance}
+  .sub{font-size:17px; color:var(--muted); margin:0 0 24px}
+  section{max-width:72ch; padding-top:26px; margin-top:26px; border-top:1px solid var(--line)}
+  section:first-of-type{border-top:0; margin-top:0}
+  h2{font-size:23px; letter-spacing:-.01em; color:var(--ink); margin:0 0 4px; scroll-margin-top:80px; text-wrap:balance}
+  h3{font-size:15px; letter-spacing:.01em; color:var(--ink); margin:26px 0 8px}
+  p{margin:0 0 14px}
+  ul{margin:0 0 14px; padding-left:20px}
+  li{margin:4px 0}
+  .note{border-left:3px solid var(--accent); background:var(--accent-weak); color:var(--ink);
+    padding:12px 16px; border-radius:0 8px 8px 0; margin:16px 0; font-size:14.5px}
+  .note b{color:var(--accent-ink)}
+
+  /* endpoint header */
+  .ep-head{display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:6px 0 14px}
+  .ep-head .m{font-size:11px; padding:5px 8px}
+  .ep-head .path{font:600 15px/1.3 var(--mono); color:var(--ink); word-break:break-all}
+
+  /* tables */
+  .tw{overflow-x:auto; border:1px solid var(--line); border-radius:10px; margin:8px 0 16px}
+  table{border-collapse:collapse; width:100%; font-size:14px; min-width:520px}
+  th,td{text-align:left; padding:10px 14px; border-bottom:1px solid var(--line); vertical-align:top}
+  thead th{background:var(--raise); color:var(--ink); font-weight:600; font-size:12px;
+    text-transform:uppercase; letter-spacing:.05em}
+  tbody tr:last-child td{border-bottom:0}
+  td code{color:var(--accent-ink); background:var(--accent-weak); padding:2px 6px; border-radius:5px; white-space:nowrap}
+  td .ty{font:600 11px/1 var(--mono); color:var(--muted)}
+
+  /* code blocks */
+  figure.code{margin:14px 0; border-radius:var(--radius); overflow:hidden; border:1px solid var(--code-line); background:var(--code-bg)}
+  figure.code figcaption{display:flex; align-items:center; gap:10px; padding:9px 14px;
+    border-bottom:1px solid var(--code-line); background:#0b120e}
+  figure.code figcaption .lbl{font:600 11px/1 var(--mono); color:var(--code-mut); letter-spacing:.06em; text-transform:uppercase}
+  figure.code .copy{margin-left:auto; appearance:none; cursor:pointer; border:1px solid var(--code-line);
+    background:transparent; color:var(--code-mut); font:600 11px/1 var(--mono); padding:5px 9px; border-radius:6px}
+  figure.code .copy:hover{color:var(--code-fg); border-color:var(--code-mut)}
+  pre{margin:0; padding:16px; overflow-x:auto; font-family:var(--mono); font-size:13px; line-height:1.65; color:var(--code-fg)}
+  pre .c{color:var(--code-mut)}          /* comment */
+  pre .s{color:#8fd6a8}                    /* string  */
+  pre .k{color:#6fbfe0}                    /* keyword */
+  pre .n{color:#e6c07b}                    /* number/verb */
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px; max-width:72ch}
+  .stat{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:14px 16px}
+  .stat .k{font:600 11px/1 var(--sans); text-transform:uppercase; letter-spacing:.06em; color:var(--muted)}
+  .stat .v{font:650 22px/1.1 var(--sans); color:var(--ink); margin-top:6px; font-variant-numeric:tabular-nums}
+  .stat .v small{font:500 13px/1 var(--mono); color:var(--muted)}
+
+  .pill{display:inline-block; font:600 12px/1 var(--mono); padding:4px 9px; border-radius:20px; margin:2px 4px 2px 0}
+  .pill.queued{color:var(--muted); background:var(--surface); border:1px solid var(--line)}
+  .pill.running{color:var(--get); background:var(--get-weak)}
+  .pill.done{color:var(--accent-ink); background:var(--accent-weak)}
+  .pill.error{color:#c0392b; background:#fbeae7}
+  :root[data-theme="dark"] .pill.error,@media (prefers-color-scheme:dark){.pill.error{color:#f0857a; background:#2c1714}}
+
+  footer{max-width:72ch; margin:48px auto 0; padding:22px 40px 40px; color:var(--muted); font-size:13.5px; border-top:1px solid var(--line)}
+
+  @media (max-width:860px){
+    .shell{grid-template-columns:1fr}
+    nav.side{display:none}
+    main{padding:28px 20px 72px}
+    .topbar .base{display:none}
+    .grid2{grid-template-columns:1fr}
+  }
+</style>
+
+<header class="topbar">
+  <span class="brand">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 21c0-6 3-10 8-12-1 7-4 10-8 12Z" fill="var(--accent)"/>
+      <path d="M12 21C12 13 8 8 3 6c1 8 5 12 9 15Z" fill="var(--accent)" opacity=".55"/>
+      <path d="M12 21v-6" stroke="var(--accent-ink)" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    Treegens API <span class="ver">v2-beta</span>
+  </span>
+  <span class="base" title="Base URL">https://cy6erlizard--treegens-motion-memory-web.modal.run</span>
+  <button class="tgl" id="tgl" aria-label="Toggle color theme" title="Toggle theme">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>
+  </button>
+</header>
+
+<div class="shell">
+  <nav class="side">
+    <h4>Guide</h4>
+    <a href="#overview">Overview</a>
+    <a href="#auth">Authentication</a>
+    <a href="#quickstart">Quickstart</a>
+    <a href="#lifecycle">Job lifecycle</a>
+    <h4>Endpoints</h4>
+    <a class="ep" href="#submit"><span class="m post">POST</span> /visits/&#123;id&#125;/videos</a>
+    <a class="ep" href="#job"><span class="m get">GET</span> /jobs/&#123;id&#125;</a>
+    <a class="ep" href="#video"><span class="m get">GET</span> /jobs/&#123;id&#125;/video</a>
+    <a class="ep" href="#path"><span class="m get">GET</span> /jobs/&#123;id&#125;/path_image</a>
+    <a class="ep" href="#health"><span class="m get">GET</span> /health</a>
+    <h4>Reference</h4>
+    <a href="#result">Result object</a>
+    <a href="#errors">Errors</a>
+    <a href="#sdk">Client examples</a>
+  </nav>
+
+  <main>
+    <div class="lede">
+      <h1>Mangrove Counting API</h1>
+      <p class="sub">Submit a field walkthrough video, get back a deduplicated count of unique mangrove trees, an annotated video, and a top-down spatial map. Built for server-to-server integration.</p>
+    </div>
+
+    <section id="overview">
+      <h2>Overview</h2>
+      <p>The API turns a single video of a planting site into an auditable tree count. It detects seedlings in every frame, tracks each one across frames, and counts <b>unique trees</b> rather than raw per-frame boxes, then corrects for the two ways a walkthrough double-counts: the operator walking a row and walking back, and zooming in and out.</p>
+      <p>Processing runs on GPU and takes roughly <b>30 to 90 seconds</b> per clip, so the API is <b>asynchronous</b>: you submit a video and receive a <code>job_id</code>, then poll until the job is <code>done</code>. Many videos from different sites are processed in parallel.</p>
+      <div class="grid2">
+        <div class="stat"><div class="k">Protocol</div><div class="v">REST <small>/ JSON + multipart</small></div></div>
+        <div class="stat"><div class="k">Model</div><div class="v">YOLO26-OBB <small>v2-beta</small></div></div>
+      </div>
+    </section>
+
+    <section id="auth">
+      <h2>Authentication</h2>
+      <p>The current deployment is <b>open</b> and requires no key, intended to be called from Treegens' backend over HTTPS. Do not expose the base URL directly to end users.</p>
+      <div class="note"><b>Adding a key.</b> A shared <code>Authorization: Bearer &lt;token&gt;</code> header can be enabled on request, so only your backend can submit jobs. Ask and it will be turned on for your environment.</div>
+    </section>
+
+    <section id="quickstart">
+      <h2>Quickstart</h2>
+      <p>Three calls: submit, poll, read. The base URL is omitted below for brevity.</p>
+      <figure class="code">
+        <figcaption><span class="lbl">curl</span><button class="copy">Copy</button></figcaption>
+<pre><span class="c"># 1. submit a video for a visit -&gt; 202 with a job id</span>
+curl -X <span class="n">POST</span> -F <span class="s">"video=@visit_001.mp4"</span> \
+  <span class="s">"$BASE/visits/site-42/videos"</span>
+<span class="c"># { "job_id": "a1b2c3d4", "status": "queued", "poll": "/jobs/a1b2c3d4" }</span>
+
+<span class="c"># 2. poll the job until status is "done"</span>
+curl <span class="s">"$BASE/jobs/a1b2c3d4"</span>
+
+<span class="c"># 3. download the annotated count video</span>
+curl <span class="s">"$BASE/jobs/a1b2c3d4/video"</span> -o annotated.mp4</pre>
+      </figure>
+    </section>
+
+    <section id="lifecycle">
+      <h2>Job lifecycle</h2>
+      <p>Every submission moves through these states. Poll <code>GET /jobs/&#123;id&#125;</code> every few seconds; the <code>result</code> object appears only once the status is <code>done</code>.</p>
+      <p>
+        <span class="pill queued">queued</span>
+        <span class="pill running">running</span>
+        <span class="pill done">done</span>
+        <span class="pill error">error</span>
+      </p>
+      <div class="tw"><table>
+        <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>queued</code></td><td>Accepted; waiting for a free GPU worker.</td></tr>
+          <tr><td><code>running</code></td><td>Detection, tracking and correction in progress.</td></tr>
+          <tr><td><code>done</code></td><td>Finished. The <code>result</code> object is populated.</td></tr>
+          <tr><td><code>error</code></td><td>Processing failed. See the <code>error</code> field for the reason.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="submit">
+      <h2>Submit a video</h2>
+      <div class="ep-head"><span class="m post">POST</span><span class="path">/visits/&#123;visit_id&#125;/videos</span></div>
+      <p>Upload one video as multipart form data under the field name <code>video</code>. Returns immediately with a job id; processing happens in the background.</p>
+      <h3>Path parameters</h3>
+      <div class="tw"><table>
+        <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody><tr><td><code>visit_id</code></td><td><span class="ty">string</span></td><td>Your identifier for the site visit. Echoed back on the job so you can correlate results.</td></tr></tbody>
+      </table></div>
+      <h3>Body</h3>
+      <div class="tw"><table>
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody><tr><td><code>video</code></td><td><span class="ty">file</span></td><td>The walkthrough clip (mp4/mov). Required.</td></tr></tbody>
+      </table></div>
+      <h3>Response <span class="ty">202 Accepted</span></h3>
+      <figure class="code"><figcaption><span class="lbl">json</span><button class="copy">Copy</button></figcaption>
+<pre>{
+  <span class="k">"job_id"</span>: <span class="s">"a1b2c3d4e5f6"</span>,
+  <span class="k">"status"</span>: <span class="s">"queued"</span>,
+  <span class="k">"poll"</span>: <span class="s">"/jobs/a1b2c3d4e5f6"</span>
+}</pre></figure>
+    </section>
+
+    <section id="job">
+      <h2>Get job status and result</h2>
+      <div class="ep-head"><span class="m get">GET</span><span class="path">/jobs/&#123;job_id&#125;</span></div>
+      <p>Returns the current job. While <code>queued</code> or <code>running</code> the payload is small; when <code>done</code> it carries the full <a href="#result">result object</a>.</p>
+      <h3>Response <span class="ty">200 OK</span> (done)</h3>
+      <figure class="code"><figcaption><span class="lbl">json</span><button class="copy">Copy</button></figcaption>
+<pre>{
+  <span class="k">"job_id"</span>: <span class="s">"a1b2c3d4e5f6"</span>,
+  <span class="k">"visit_id"</span>: <span class="s">"site-42"</span>,
+  <span class="k">"status"</span>: <span class="s">"done"</span>,
+  <span class="k">"pipeline"</span>: <span class="s">"memory"</span>,
+  <span class="k">"model_version"</span>: <span class="s">"treegens-yolo26-obb-v2-beta"</span>,
+  <span class="k">"result"</span>: {
+    <span class="k">"unique_count"</span>: <span class="n">53</span>,
+    <span class="k">"count_before_correction"</span>: <span class="n">75</span>,
+    <span class="k">"naive_per_frame_sum"</span>: <span class="n">4120</span>,
+    <span class="k">"frames"</span>: <span class="n">640</span>,
+    <span class="k">"confidence"</span>: <span class="n">0.94</span>,
+    <span class="k">"requires_review"</span>: <span class="k">false</span>,
+    <span class="k">"annotated_video"</span>: <span class="s">"/jobs/a1b2c3d4e5f6/video"</span>,
+    <span class="k">"path_image"</span>: <span class="s">"/jobs/a1b2c3d4e5f6/path_image"</span>,
+    <span class="k">"model_version"</span>: <span class="s">"treegens-yolo26-obb-v2-beta"</span>,
+    <span class="k">"dataset_version"</span>: <span class="s">"v2-beta"</span>,
+    <span class="k">"count_correction"</span>: { <span class="k">"merged_total"</span>: <span class="n">22</span>, <span class="k">"spatial"</span>: {<span class="c">/* revisit dedup */</span>} },
+    <span class="k">"camera_motion"</span>: { <span class="k">"dominant_state"</span>: <span class="s">"forward"</span>, <span class="k">"uncertain_fraction"</span>: <span class="n">0.04</span> },
+    <span class="k">"gps"</span>: { <span class="k">"lat"</span>: <span class="k">null</span>, <span class="k">"lon"</span>: <span class="k">null</span>, <span class="k">"accuracy"</span>: <span class="s">"no embedded GPS (site-level only)"</span> }
+  }
+}</pre></figure>
+    </section>
+
+    <section id="video">
+      <h2>Get the annotated video</h2>
+      <div class="ep-head"><span class="m get">GET</span><span class="path">/jobs/&#123;job_id&#125;/video</span></div>
+      <p>Returns the browser-playable H.264 <code>video/mp4</code>: every tree boxed with its stable ID and a running unique count. Available once the job is <code>done</code>.</p>
+    </section>
+
+    <section id="path">
+      <h2>Get the spatial map</h2>
+      <div class="ep-head"><span class="m get">GET</span><span class="path">/jobs/&#123;job_id&#125;/path_image</span></div>
+      <p>Returns a <code>image/png</code> top-down map: the camera's reconstructed path coloured by what it was doing, the inferred tree positions, and any revisits that were merged. Present only when a path could be reconstructed (see <code>result.path_image</code>).</p>
+    </section>
+
+    <section id="health">
+      <h2>Health check</h2>
+      <div class="ep-head"><span class="m get">GET</span><span class="path">/health</span></div>
+      <figure class="code"><figcaption><span class="lbl">json</span><button class="copy">Copy</button></figcaption>
+<pre>{ <span class="k">"status"</span>: <span class="s">"ok"</span>, <span class="k">"model"</span>: <span class="s">"treegens-yolo26-obb-v2-beta"</span>,
+  <span class="k">"pipeline"</span>: <span class="s">"memory"</span>, <span class="k">"backend"</span>: <span class="s">"modal"</span>, <span class="k">"gpu"</span>: <span class="s">"L4"</span> }</pre></figure>
+    </section>
+
+    <section id="result">
+      <h2>The result object</h2>
+      <p>Present on a <code>done</code> job under <code>result</code>. The fields your integration will use most are <code>unique_count</code> and <code>requires_review</code>.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>unique_count</code></td><td><span class="ty">int</span></td><td>Headline number: unique mangrove trees after all deduplication and correction.</td></tr>
+          <tr><td><code>requires_review</code></td><td><span class="ty">bool</span></td><td>True when the count is uncertain (no detections, heavy gap-filling, or ambiguous camera motion). Route these to a human verifier.</td></tr>
+          <tr><td><code>count_before_correction</code></td><td><span class="ty">int</span></td><td>Unique track IDs before revisit and zoom correction. Always &ge; <code>unique_count</code>; the gap is what was merged.</td></tr>
+          <tr><td><code>confidence</code></td><td><span class="ty">float</span></td><td>0 to 1. Share of counted boxes that were real detections rather than interpolated fills.</td></tr>
+          <tr><td><code>naive_per_frame_sum</code></td><td><span class="ty">int</span></td><td>What a naive per-frame box count would report. Shown for contrast; hugely inflated, never a real count.</td></tr>
+          <tr><td><code>frames</code></td><td><span class="ty">int</span></td><td>Frames processed from the clip.</td></tr>
+          <tr><td><code>count_correction</code></td><td><span class="ty">object</span></td><td>What the dedup stages merged: <code>parked_zoom</code>, <code>respawn</code>, <code>spatial</code> (revisit), and <code>merged_total</code>.</td></tr>
+          <tr><td><code>camera_motion</code></td><td><span class="ty">object</span></td><td>Advisory summary of what the camera did: <code>dominant_state</code>, per-state fractions, <code>uncertain_fraction</code>, zoom-segment count.</td></tr>
+          <tr><td><code>camera_path</code></td><td><span class="ty">object</span></td><td>Reconstructed top-down path, inferred tree map, and <code>n_revisits</code>. Null when no path could be built.</td></tr>
+          <tr><td><code>gps</code></td><td><span class="ty">object</span></td><td><code>lat</code>, <code>lon</code>, <code>accuracy</code>. Videos carry no embedded GPS, so this is camera/site-level only, never per-tree.</td></tr>
+          <tr><td><code>metadata</code></td><td><span class="ty">object</span></td><td>Container metadata (width, height, frame rate, duration) from ffprobe.</td></tr>
+          <tr><td><code>annotated_video</code></td><td><span class="ty">string</span></td><td>Relative URL of the annotated count video.</td></tr>
+          <tr><td><code>path_image</code></td><td><span class="ty">string</span></td><td>Relative URL of the spatial map PNG, when produced.</td></tr>
+          <tr><td><code>model_version</code></td><td><span class="ty">string</span></td><td>Model that produced the count. Stamp it on stored results.</td></tr>
+          <tr><td><code>dataset_version</code></td><td><span class="ty">string</span></td><td>Training dataset version behind the model.</td></tr>
+          <tr><td><code>timings_s</code></td><td><span class="ty">object</span></td><td>Per-stage wall-clock timings in seconds.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note"><b>Count once, not per frame.</b> <code>unique_count</code> is the only number to store as the tree total. <code>naive_per_frame_sum</code> is deliberately included so you can see the inflation the pipeline removes.</div>
+    </section>
+
+    <section id="errors">
+      <h2>Errors</h2>
+      <div class="tw"><table>
+        <thead><tr><th>Code</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td><code>202</code></td><td>Video accepted, job created.</td></tr>
+          <tr><td><code>400</code></td><td>Missing or empty <code>video</code> field on submit.</td></tr>
+          <tr><td><code>404</code></td><td>Unknown <code>job_id</code>, or an artifact requested before the job is <code>done</code>.</td></tr>
+        </tbody>
+      </table></div>
+      <p>A job that fails during processing still returns <code>200</code> from <code>GET /jobs/&#123;id&#125;</code> with <code>status: "error"</code> and a human-readable <code>error</code> message, rather than an HTTP error. Always branch on the <code>status</code> field.</p>
+    </section>
+
+    <section id="sdk">
+      <h2>Client examples</h2>
+      <h3>Python</h3>
+      <figure class="code"><figcaption><span class="lbl">python</span><button class="copy">Copy</button></figcaption>
+<pre><span class="k">import</span> time, requests
+BASE = <span class="s">"https://cy6erlizard--treegens-motion-memory-web.modal.run"</span>
+
+<span class="c"># 1. submit</span>
+<span class="k">with</span> open(<span class="s">"visit_001.mp4"</span>, <span class="s">"rb"</span>) <span class="k">as</span> f:
+    job = requests.post(<span class="s">f"{BASE}/visits/site-42/videos"</span>, files={<span class="s">"video"</span>: f}).json()
+job_id = job[<span class="s">"job_id"</span>]
+
+<span class="c"># 2. poll until finished</span>
+<span class="k">while</span> <span class="k">True</span>:
+    r = requests.get(<span class="s">f"{BASE}/jobs/{job_id}"</span>).json()
+    <span class="k">if</span> r[<span class="s">"status"</span>] <span class="k">in</span> (<span class="s">"done"</span>, <span class="s">"error"</span>):
+        <span class="k">break</span>
+    time.sleep(<span class="n">5</span>)
+
+<span class="c"># 3. use the result</span>
+res = r[<span class="s">"result"</span>]
+print(<span class="s">"unique trees:"</span>, res[<span class="s">"unique_count"</span>], <span class="s">"| review:"</span>, res[<span class="s">"requires_review"</span>])
+
+<span class="c"># 4. save the annotated video</span>
+mp4 = requests.get(<span class="s">f"{BASE}/jobs/{job_id}/video"</span>)
+open(<span class="s">"annotated.mp4"</span>, <span class="s">"wb"</span>).write(mp4.content)</pre></figure>
+
+      <h3>Node.js</h3>
+      <figure class="code"><figcaption><span class="lbl">javascript</span><button class="copy">Copy</button></figcaption>
+<pre><span class="k">import</span> fs <span class="k">from</span> <span class="s">"node:fs"</span>;
+<span class="k">const</span> BASE = <span class="s">"https://cy6erlizard--treegens-motion-memory-web.modal.run"</span>;
+
+<span class="c">// 1. submit</span>
+<span class="k">const</span> fd = <span class="k">new</span> FormData();
+fd.append(<span class="s">"video"</span>, <span class="k">new</span> Blob([fs.readFileSync(<span class="s">"visit_001.mp4"</span>)]), <span class="s">"visit_001.mp4"</span>);
+<span class="k">let</span> { job_id } = <span class="k">await</span> (<span class="k">await</span> fetch(<span class="s">`${BASE}/visits/site-42/videos`</span>, { method: <span class="s">"POST"</span>, body: fd })).json();
+
+<span class="c">// 2. poll until finished</span>
+<span class="k">let</span> job;
+<span class="k">do</span> {
+  <span class="k">await</span> <span class="k">new</span> Promise(r =&gt; setTimeout(r, <span class="n">5000</span>));
+  job = <span class="k">await</span> (<span class="k">await</span> fetch(<span class="s">`${BASE}/jobs/${job_id}`</span>)).json();
+} <span class="k">while</span> (job.status !== <span class="s">"done"</span> &amp;&amp; job.status !== <span class="s">"error"</span>);
+
+console.log(<span class="s">"unique trees:"</span>, job.result.unique_count);</pre></figure>
+      <div class="note"><b>Machine-readable spec.</b> An OpenAPI 3.1 document is published alongside this page at <code>openapi.json</code>. Point your code generator at it to produce a typed client in any language.</div>
+    </section>
+
+    <footer>
+      Treegens mangrove counting API. Model <code>treegens-yolo26-obb-v2-beta</code> on dataset <code>v2-beta</code>.
+      Counts are unique tracked trees, not per-frame detections. Uncertain results are flagged for human review.
+    </footer>
+  </main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement, key="tg-docs-theme";
+    var saved=null; try{saved=localStorage.getItem(key);}catch(e){}
+    if(saved){root.setAttribute("data-theme",saved);}
+    document.getElementById("tgl").addEventListener("click",function(){
+      var cur=root.getAttribute("data-theme");
+      if(!cur){cur=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}
+      var next=cur==="dark"?"light":"dark";
+      root.setAttribute("data-theme",next);
+      try{localStorage.setItem(key,next);}catch(e){}
+    });
+    document.querySelectorAll("figure.code .copy").forEach(function(btn){
+      btn.addEventListener("click",function(){
+        var pre=btn.closest("figure").querySelector("pre");
+        navigator.clipboard.writeText(pre.innerText).then(function(){
+          var t=btn.textContent; btn.textContent="Copied"; setTimeout(function(){btn.textContent=t;},1200);
+        });
+      });
+    });
+  })();
+</script>

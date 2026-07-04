@@ -1,0 +1,148 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Treegens Mangrove Counting API",
+    "version": "v2-beta",
+    "description": "Submit a field walkthrough video of a mangrove planting site and get back a deduplicated count of unique trees, an annotated video, and a top-down spatial map. Processing is asynchronous: submit a video, receive a job id, poll until the job is done. Counts are unique tracked trees, not per-frame detections; uncertain results are flagged for human review."
+  },
+  "servers": [
+    { "url": "https://cy6erlizard--treegens-motion-memory-web.modal.run", "description": "Production (Modal, GPU L4)" }
+  ],
+  "paths": {
+    "/visits/{visit_id}/videos": {
+      "post": {
+        "operationId": "submitVideo",
+        "summary": "Submit a video for a visit",
+        "description": "Upload one video as multipart form data under the field name 'video'. Returns immediately with a job id; processing runs in the background.",
+        "parameters": [
+          { "name": "visit_id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Your identifier for the site visit; echoed back on the job." }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["video"],
+                "properties": { "video": { "type": "string", "format": "binary", "description": "The walkthrough clip (mp4/mov)." } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted; job created.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JobAccepted" } } }
+          },
+          "400": { "description": "Missing or empty 'video' field." }
+        }
+      }
+    },
+    "/jobs/{job_id}": {
+      "get": {
+        "operationId": "getJob",
+        "summary": "Get job status and result",
+        "description": "Returns the current job. While queued or running the payload is small; when done it carries the full result object. A processing failure returns 200 with status 'error', not an HTTP error.",
+        "parameters": [
+          { "name": "job_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "The job.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Job" } } } },
+          "404": { "description": "Unknown job_id." }
+        }
+      }
+    },
+    "/jobs/{job_id}/video": {
+      "get": {
+        "operationId": "getJobVideo",
+        "summary": "Download the annotated count video",
+        "description": "Browser-playable H.264 mp4 with every tree boxed by stable ID and a running unique count. Available once the job is done.",
+        "parameters": [ { "name": "job_id", "in": "path", "required": true, "schema": { "type": "string" } } ],
+        "responses": {
+          "200": { "description": "Annotated video.", "content": { "video/mp4": { "schema": { "type": "string", "format": "binary" } } } },
+          "404": { "description": "Missing job or not finished." }
+        }
+      }
+    },
+    "/jobs/{job_id}/path_image": {
+      "get": {
+        "operationId": "getJobPathImage",
+        "summary": "Download the spatial map",
+        "description": "Top-down PNG of the reconstructed camera path, inferred tree positions, and merged revisits. Present only when a path could be reconstructed (see result.path_image).",
+        "parameters": [ { "name": "job_id", "in": "path", "required": true, "schema": { "type": "string" } } ],
+        "responses": {
+          "200": { "description": "Spatial map PNG.", "content": { "image/png": { "schema": { "type": "string", "format": "binary" } } } },
+          "404": { "description": "Missing job or no path image." }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "Service health and model info",
+        "responses": {
+          "200": {
+            "description": "Service is up.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Health" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "JobAccepted": {
+        "type": "object",
+        "properties": {
+          "job_id": { "type": "string" },
+          "status": { "type": "string", "enum": ["queued"] },
+          "poll": { "type": "string", "description": "Relative URL to poll for status." }
+        }
+      },
+      "Job": {
+        "type": "object",
+        "properties": {
+          "job_id": { "type": "string" },
+          "visit_id": { "type": "string" },
+          "status": { "type": "string", "enum": ["queued", "running", "done", "error"] },
+          "pipeline": { "type": "string", "example": "memory" },
+          "model_version": { "type": "string", "example": "treegens-yolo26-obb-v2-beta" },
+          "error": { "type": "string", "description": "Present only when status is 'error'." },
+          "result": { "$ref": "#/components/schemas/VisitResult" }
+        }
+      },
+      "VisitResult": {
+        "type": "object",
+        "description": "Present on a done job under 'result'.",
+        "properties": {
+          "unique_count": { "type": "integer", "description": "Unique mangrove trees after all deduplication. The headline number to store." },
+          "requires_review": { "type": "boolean", "description": "True when the count is uncertain; route to a human verifier." },
+          "count_before_correction": { "type": "integer", "description": "Unique track IDs before revisit and zoom correction. Always >= unique_count." },
+          "confidence": { "type": "number", "format": "float", "description": "0 to 1; share of counted boxes that were real detections vs interpolated fills." },
+          "naive_per_frame_sum": { "type": "integer", "description": "What a naive per-frame box count would report. Inflated; never a real count." },
+          "frames": { "type": "integer" },
+          "count_correction": { "type": "object", "description": "What the dedup stages merged: parked_zoom, respawn, spatial, merged_total." },
+          "camera_motion": { "type": "object", "description": "Advisory summary of camera behaviour: dominant_state, state_fractions, uncertain_fraction, n_zoom_segments." },
+          "camera_path": { "type": ["object", "null"], "description": "Reconstructed path, tree map, and n_revisits. Null when no path could be built." },
+          "gps": { "type": "object", "description": "lat, lon, accuracy. Camera/site-level only, never per-tree.", "properties": { "lat": { "type": ["number", "null"] }, "lon": { "type": ["number", "null"] }, "accuracy": { "type": "string" } } },
+          "metadata": { "type": "object", "description": "Container metadata from ffprobe (width, height, frame rate, duration)." },
+          "annotated_video": { "type": ["string", "null"], "description": "Relative URL of the annotated count video." },
+          "path_image": { "type": "string", "description": "Relative URL of the spatial map PNG, when produced." },
+          "model_version": { "type": "string" },
+          "dataset_version": { "type": "string" },
+          "timings_s": { "type": "object", "description": "Per-stage wall-clock timings in seconds." }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "ok" },
+          "model": { "type": "string" },
+          "pipeline": { "type": "string" },
+          "backend": { "type": "string", "example": "modal" },
+          "gpu": { "type": "string", "example": "L4" }
+        }
+      }
+    }
+  }
+}
