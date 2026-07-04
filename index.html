@@ -95,6 +95,10 @@
   .note{border-left:3px solid var(--accent); background:var(--accent-weak); color:var(--ink);
     padding:12px 16px; border-radius:0 8px 8px 0; margin:16px 0; font-size:14.5px}
   .note b{color:var(--accent-ink)}
+  .ai-note{background:var(--accent-weak); border:1px solid color-mix(in srgb,var(--accent) 32%,transparent);
+    border-radius:10px; padding:13px 16px; margin:0 0 12px; color:var(--ink); font-size:14.5px}
+  figure.code.ai{border-color:color-mix(in srgb,var(--accent) 45%,var(--code-line))}
+  figure.code.ai figcaption .lbl{color:var(--accent-ink)}
 
   /* endpoint header */
   .ep-head{display:flex; align-items:center; gap:12px; flex-wrap:wrap;
@@ -168,6 +172,7 @@
 <div class="shell">
   <nav class="side">
     <h4>Guide</h4>
+    <a href="#ai">Use with an AI assistant</a>
     <a href="#overview">Overview</a>
     <a href="#auth">Authentication</a>
     <a href="#quickstart">Quickstart</a>
@@ -189,6 +194,39 @@
       <h1>Mangrove Counting API</h1>
       <p class="sub">Submit a field walkthrough video, get back a deduplicated count of unique mangrove trees, an annotated video, and a top-down spatial map. Built for server-to-server integration.</p>
     </div>
+
+    <section id="ai">
+      <h2>Use with an AI assistant</h2>
+      <div class="ai-note">In a hurry? Paste the prompt below into ChatGPT, Claude, Cursor, or any coding assistant. It points the assistant at this reference and the OpenAPI spec so it can discover the whole API and write your integration for you.</div>
+      <figure class="code ai">
+        <figcaption><span class="lbl">prompt &middot; paste into your assistant</span><button class="copy">Copy</button></figcaption>
+<pre>I want to integrate the Treegens Mangrove Counting API into my backend.
+
+First, read its full documentation and machine-readable schema:
+- Reference (human): https://cy6erlizard.github.io/treegens-api-docs/
+- OpenAPI 3.1 spec:   https://cy6erlizard.github.io/treegens-api-docs/openapi.json
+
+Key facts:
+- Base URL: https://cy6erlizard--treegens-motion-memory-web.modal.run
+- The API is ASYNCHRONOUS. Flow:
+  1. POST a video (multipart form field "video") to /visits/{visit_id}/videos
+     -&gt; returns { job_id, status: "queued" }.
+  2. Poll GET /jobs/{job_id} every few seconds until "status" is "done"
+     (or "error").
+  3. On "done", read result.unique_count (the unique tree count). Optionally
+     download the annotated video from /jobs/{job_id}/video and the spatial
+     map from /jobs/{job_id}/path_image.
+- Always branch on the job "status" field: queued | running | done | error.
+- Route any result where result.requires_review is true to a human verifier.
+- Store result.unique_count as the tree total (never naive_per_frame_sum).
+
+Using the OpenAPI spec above as the source of truth, write clean,
+production-ready code in [LANGUAGE / FRAMEWORK] that submits a video and
+returns the unique tree count, with polling, a timeout, and error handling.
+Then show me how to store the result and the model_version alongside it.</pre>
+      </figure>
+      <p style="font-size:13.5px;color:var(--muted);margin:2px 0 0">Replace <code>[LANGUAGE / FRAMEWORK]</code> with your stack, for example "Python + FastAPI" or "Node + Express".</p>
+    </section>
 
     <section id="overview">
       <h2>Overview</h2>
