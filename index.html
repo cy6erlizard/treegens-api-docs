@@ -185,7 +185,7 @@
     <a href="#overview">Overview</a>
     <a href="#auth">Authentication</a>
     <a href="#quickstart">Quickstart</a>
-    <a href="#lifecycle">Job lifecycle</a>
+    <a href="#async">Async mode (optional)</a>
     <h4>Endpoints</h4>
     <a class="ep" href="#submit"><span class="m post">POST</span> /visits/&#123;id&#125;/videos</a>
     <a class="ep" href="#job"><span class="m get">GET</span> /jobs/&#123;id&#125;</a>
@@ -222,22 +222,23 @@ First, read its full documentation and machine-readable schema:
 
 Key facts:
 - Base URL: https://cy6erlizard--treegens-motion-memory-web.modal.run
-- The API is ASYNCHRONOUS. Flow:
+- SINGLE REQUEST. Flow:
   1. POST a video (multipart form field "video") to /visits/{visit_id}/videos
-     -&gt; returns { job_id, status: "queued" }.
-  2. Poll GET /jobs/{job_id} every few seconds until "status" is "done"
-     (or "error").
-  3. On "done", read result.unique_count (the unique tree count). Optionally
-     download the annotated video from /jobs/{job_id}/video and the spatial
-     map from /jobs/{job_id}/path_image.
-- Always branch on the job "status" field: queued | running | done | error.
+  2. The SAME response returns the full result. Read result.unique_count (the
+     unique tree count). Set a generous read timeout (a few minutes): the
+     request stays open while the video is processed (about 30 to 90 seconds).
+  3. Optionally download the annotated video from result.annotated_video and
+     the spatial map from result.path_image.
+- Check the top-level "status": "done" means success, "error" means it failed
+  (see the "error" field).
 - Route any result where result.requires_review is true to a human verifier.
 - Store result.unique_count as the tree total (never naive_per_frame_sum).
+- For unusually long videos, add ?async=true to get a job id to poll instead.
 
 Using the OpenAPI spec above as the source of truth, write clean,
-production-ready code in [LANGUAGE / FRAMEWORK] that submits a video and
-returns the unique tree count, with polling, a timeout, and error handling.
-Then show me how to store the result and the model_version alongside it.</pre>
+production-ready code in [LANGUAGE / FRAMEWORK] that submits a video in a
+single request and returns the unique tree count, with a read timeout and
+error handling. Then show me how to store the result and model_version.</pre>
       </figure>
       <p style="font-size:13.5px;color:var(--muted);margin:2px 0 0">Replace <code>[LANGUAGE / FRAMEWORK]</code> with your stack, for example "Python + FastAPI" or "Node + Express".</p>
     </section>
@@ -245,7 +246,7 @@ Then show me how to store the result and the model_version alongside it.</pre>
     <section id="overview">
       <h2>Overview</h2>
       <p>The API turns a single video of a planting site into an auditable tree count. It detects seedlings in every frame, tracks each one across frames, and counts <b>unique trees</b> rather than raw per-frame boxes, then corrects for the two ways a walkthrough double-counts: the operator walking a row and walking back, and zooming in and out.</p>
-      <p>Processing runs on GPU and takes roughly <b>30 to 90 seconds</b> per clip, so the API is <b>asynchronous</b>: you submit a video and receive a <code>job_id</code>, then poll until the job is <code>done</code>. Many videos from different sites are processed in parallel.</p>
+      <p>It works in a <b>single request</b>: you POST a video and the same response carries the full result, including <code>unique_count</code>. No polling. Processing runs on GPU and takes roughly <b>30 to 90 seconds</b> per clip, so the request stays open for that long; set your HTTP client's read timeout to a few minutes. Many videos from different sites are processed in parallel. For unusually long videos there is an optional <a href="#async">async mode</a>.</p>
       <div class="grid2">
         <div class="stat"><div class="k">Protocol</div><div class="v">REST <small>/ JSON + multipart</small></div></div>
         <div class="stat"><div class="k">Model</div><div class="v">YOLO26-OBB <small>v2-beta</small></div></div>
@@ -260,25 +261,26 @@ Then show me how to store the result and the model_version alongside it.</pre>
 
     <section id="quickstart">
       <h2>Quickstart</h2>
-      <p>Three calls: submit, poll, read. The base URL is omitted below for brevity.</p>
+      <p>One call: POST the video, read the count from the response. The base URL is omitted below for brevity. <code>--max-time 300</code> keeps the connection open while the video is processed.</p>
       <figure class="code">
         <figcaption><span class="lbl">curl</span><button class="copy">Copy</button></figcaption>
-<pre><span class="c"># 1. submit a video for a visit -&gt; 202 with a job id</span>
-curl -X <span class="n">POST</span> -F <span class="s">"video=@visit_001.mp4"</span> \
+<pre><span class="c"># submit a video and get the result back in the SAME response</span>
+curl -X <span class="n">POST</span> --max-time <span class="n">300</span> -F <span class="s">"video=@visit_001.mp4"</span> \
   <span class="s">"$BASE/visits/site-42/videos"</span>
-<span class="c"># { "job_id": "a1b2c3d4", "status": "queued", "poll": "/jobs/a1b2c3d4" }</span>
 
-<span class="c"># 2. poll the job until status is "done"</span>
-curl <span class="s">"$BASE/jobs/a1b2c3d4"</span>
+<span class="c"># {</span>
+<span class="c">#   "job_id": "a1b2c3d4", "status": "done", "visit_id": "site-42",</span>
+<span class="c">#   "result": { "unique_count": 53, "requires_review": false, ... }</span>
+<span class="c"># }</span>
 
-<span class="c"># 3. download the annotated count video</span>
+<span class="c"># the annotated video is at result.annotated_video, if you want it</span>
 curl <span class="s">"$BASE/jobs/a1b2c3d4/video"</span> -o annotated.mp4</pre>
       </figure>
     </section>
 
-    <section id="lifecycle">
-      <h2>Job lifecycle</h2>
-      <p>Every submission moves through these states. Poll <code>GET /jobs/&#123;id&#125;</code> every few seconds; the <code>result</code> object appears only once the status is <code>done</code>.</p>
+    <section id="async">
+      <h2>Async mode (optional)</h2>
+      <p>Add <code>?async=true</code> to the submit call to get a <code>job_id</code> back immediately (<code>202</code>) instead of waiting. Use this only for unusually long videos that might exceed your request timeout. Then poll <code>GET /jobs/&#123;id&#125;</code> until the top-level <code>status</code> is <code>done</code>, and read the same <code>result</code> object.</p>
       <p>
         <span class="pill queued">queued</span>
         <span class="pill running">running</span>
@@ -299,30 +301,39 @@ curl <span class="s">"$BASE/jobs/a1b2c3d4/video"</span> -o annotated.mp4</pre>
     <section id="submit">
       <h2>Submit a video</h2>
       <div class="ep-head"><span class="m post">POST</span><span class="path">/visits/&#123;visit_id&#125;/videos</span></div>
-      <p>Upload one video as multipart form data under the field name <code>video</code>. Returns immediately with a job id; processing happens in the background.</p>
+      <p>Upload one video as multipart form data under the field name <code>video</code>. By default the request <b>waits for processing and returns the full result</b> in the response. The connection stays open for the processing time (about 30 to 90 seconds), so set a read timeout of a few minutes.</p>
       <h3>Path parameters</h3>
       <div class="tw"><table>
         <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
-        <tbody><tr><td><code>visit_id</code></td><td><span class="ty">string</span></td><td>Your identifier for the site visit. Echoed back on the job so you can correlate results.</td></tr></tbody>
+        <tbody><tr><td><code>visit_id</code></td><td><span class="ty">string</span></td><td>Your identifier for the site visit. Echoed back on the response so you can correlate results.</td></tr></tbody>
       </table></div>
       <h3>Body</h3>
       <div class="tw"><table>
         <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
         <tbody><tr><td><code>video</code></td><td><span class="ty">file</span></td><td>The walkthrough clip (mp4/mov). Required.</td></tr></tbody>
       </table></div>
-      <h3>Response <span class="ty">202 Accepted</span></h3>
+      <h3>Query parameters</h3>
+      <div class="tw"><table>
+        <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody><tr><td><code>async</code></td><td><span class="ty">bool</span></td><td>Optional, default <code>false</code>. When <code>true</code>, return a <code>job_id</code> to poll (<code>202</code>) instead of waiting. See <a href="#async">async mode</a>.</td></tr></tbody>
+      </table></div>
+      <h3>Response <span class="ty">200 OK</span> (default, single request)</h3>
       <figure class="code"><figcaption><span class="lbl">json</span><button class="copy">Copy</button></figcaption>
 <pre>{
   <span class="k">"job_id"</span>: <span class="s">"a1b2c3d4e5f6"</span>,
-  <span class="k">"status"</span>: <span class="s">"queued"</span>,
-  <span class="k">"poll"</span>: <span class="s">"/jobs/a1b2c3d4e5f6"</span>
+  <span class="k">"visit_id"</span>: <span class="s">"site-42"</span>,
+  <span class="k">"status"</span>: <span class="s">"done"</span>,
+  <span class="k">"pipeline"</span>: <span class="s">"memory"</span>,
+  <span class="k">"model_version"</span>: <span class="s">"treegens-yolo26-obb-v2-beta"</span>,
+  <span class="k">"result"</span>: { <span class="k">"unique_count"</span>: <span class="n">53</span>, <span class="k">"requires_review"</span>: <span class="k">false</span>, <span class="c">/* full result object */</span> }
 }</pre></figure>
+      <div class="note">The <code>result</code> object is the same one described under <a href="#result">The result object</a>. With <code>?async=true</code> this endpoint instead returns <code>202</code> with <code>{ job_id, status: "queued", poll }</code>.</div>
     </section>
 
     <section id="job">
       <h2>Get job status and result</h2>
       <div class="ep-head"><span class="m get">GET</span><span class="path">/jobs/&#123;job_id&#125;</span></div>
-      <p>Returns the current job. While <code>queued</code> or <code>running</code> the payload is small; when <code>done</code> it carries the full <a href="#result">result object</a>.</p>
+      <p>Used with <a href="#async">async mode</a> to poll a job, and to fetch a past result by id. While <code>queued</code> or <code>running</code> the payload is small; when <code>done</code> it carries the full <a href="#result">result object</a>.</p>
       <h3>Response <span class="ty">200 OK</span> (done)</h3>
       <figure class="code"><figcaption><span class="lbl">json</span><button class="copy">Copy</button></figcaption>
 <pre>{
@@ -401,39 +412,36 @@ curl <span class="s">"$BASE/jobs/a1b2c3d4/video"</span> -o annotated.mp4</pre>
       <div class="tw"><table>
         <thead><tr><th>Code</th><th>When</th></tr></thead>
         <tbody>
-          <tr><td><code>202</code></td><td>Video accepted, job created.</td></tr>
+          <tr><td><code>200</code></td><td>Single request finished; body carries the <code>result</code>.</td></tr>
+          <tr><td><code>202</code></td><td>Async mode (<code>?async=true</code>): job accepted, poll for it.</td></tr>
           <tr><td><code>400</code></td><td>Missing or empty <code>video</code> field on submit.</td></tr>
           <tr><td><code>404</code></td><td>Unknown <code>job_id</code>, or an artifact requested before the job is <code>done</code>.</td></tr>
         </tbody>
       </table></div>
-      <p>A job that fails during processing still returns <code>200</code> from <code>GET /jobs/&#123;id&#125;</code> with <code>status: "error"</code> and a human-readable <code>error</code> message, rather than an HTTP error. Always branch on the <code>status</code> field.</p>
+      <p>If processing itself fails, the response body carries <code>status: "error"</code> and a human-readable <code>error</code> message. Always branch on the top-level <code>status</code> field rather than the HTTP code alone.</p>
     </section>
 
     <section id="sdk">
       <h2>Client examples</h2>
       <h3>Python</h3>
       <figure class="code"><figcaption><span class="lbl">python</span><button class="copy">Copy</button></figcaption>
-<pre><span class="k">import</span> time, requests
+<pre><span class="k">import</span> requests
 BASE = <span class="s">"https://cy6erlizard--treegens-motion-memory-web.modal.run"</span>
 
-<span class="c"># 1. submit</span>
+<span class="c"># one request: submit and get the result back. timeout covers processing.</span>
 <span class="k">with</span> open(<span class="s">"visit_001.mp4"</span>, <span class="s">"rb"</span>) <span class="k">as</span> f:
-    job = requests.post(<span class="s">f"{BASE}/visits/site-42/videos"</span>, files={<span class="s">"video"</span>: f}).json()
-job_id = job[<span class="s">"job_id"</span>]
+    r = requests.post(<span class="s">f"{BASE}/visits/site-42/videos"</span>,
+                      files={<span class="s">"video"</span>: f}, timeout=<span class="n">300</span>).json()
 
-<span class="c"># 2. poll until finished</span>
-<span class="k">while</span> <span class="k">True</span>:
-    r = requests.get(<span class="s">f"{BASE}/jobs/{job_id}"</span>).json()
-    <span class="k">if</span> r[<span class="s">"status"</span>] <span class="k">in</span> (<span class="s">"done"</span>, <span class="s">"error"</span>):
-        <span class="k">break</span>
-    time.sleep(<span class="n">5</span>)
+<span class="k">if</span> r[<span class="s">"status"</span>] != <span class="s">"done"</span>:
+    <span class="k">raise</span> RuntimeError(r.get(<span class="s">"error"</span>, <span class="s">"processing failed"</span>))
 
-<span class="c"># 3. use the result</span>
 res = r[<span class="s">"result"</span>]
 print(<span class="s">"unique trees:"</span>, res[<span class="s">"unique_count"</span>], <span class="s">"| review:"</span>, res[<span class="s">"requires_review"</span>])
 
-<span class="c"># 4. save the annotated video</span>
-mp4 = requests.get(<span class="s">f"{BASE}/jobs/{job_id}/video"</span>)
+<span class="c"># store the count alongside the model version, and grab the video if you want it</span>
+save(res[<span class="s">"unique_count"</span>], res[<span class="s">"model_version"</span>])          <span class="c"># your DB write</span>
+mp4 = requests.get(<span class="s">f"{BASE}{res['annotated_video']}"</span>, timeout=<span class="n">120</span>)
 open(<span class="s">"annotated.mp4"</span>, <span class="s">"wb"</span>).write(mp4.content)</pre></figure>
 
       <h3>Node.js</h3>
@@ -441,19 +449,15 @@ open(<span class="s">"annotated.mp4"</span>, <span class="s">"wb"</span>).write(
 <pre><span class="k">import</span> fs <span class="k">from</span> <span class="s">"node:fs"</span>;
 <span class="k">const</span> BASE = <span class="s">"https://cy6erlizard--treegens-motion-memory-web.modal.run"</span>;
 
-<span class="c">// 1. submit</span>
+<span class="c">// one request: submit and get the result back (5 min read timeout)</span>
 <span class="k">const</span> fd = <span class="k">new</span> FormData();
 fd.append(<span class="s">"video"</span>, <span class="k">new</span> Blob([fs.readFileSync(<span class="s">"visit_001.mp4"</span>)]), <span class="s">"visit_001.mp4"</span>);
-<span class="k">let</span> { job_id } = <span class="k">await</span> (<span class="k">await</span> fetch(<span class="s">`${BASE}/visits/site-42/videos`</span>, { method: <span class="s">"POST"</span>, body: fd })).json();
+<span class="k">const</span> r = <span class="k">await</span> fetch(<span class="s">`${BASE}/visits/site-42/videos`</span>, {
+  method: <span class="s">"POST"</span>, body: fd, signal: AbortSignal.timeout(<span class="n">300_000</span>)
+}).then(res =&gt; res.json());
 
-<span class="c">// 2. poll until finished</span>
-<span class="k">let</span> job;
-<span class="k">do</span> {
-  <span class="k">await</span> <span class="k">new</span> Promise(r =&gt; setTimeout(r, <span class="n">5000</span>));
-  job = <span class="k">await</span> (<span class="k">await</span> fetch(<span class="s">`${BASE}/jobs/${job_id}`</span>)).json();
-} <span class="k">while</span> (job.status !== <span class="s">"done"</span> &amp;&amp; job.status !== <span class="s">"error"</span>);
-
-console.log(<span class="s">"unique trees:"</span>, job.result.unique_count);</pre></figure>
+<span class="k">if</span> (r.status !== <span class="s">"done"</span>) <span class="k">throw</span> <span class="k">new</span> Error(r.error ?? <span class="s">"processing failed"</span>);
+console.log(<span class="s">"unique trees:"</span>, r.result.unique_count);</pre></figure>
       <div class="note"><b>Machine-readable spec.</b> An OpenAPI 3.1 document is published alongside this page at <code>openapi.json</code>. Point your code generator at it to produce a typed client in any language.</div>
     </section>
 

@@ -3,7 +3,7 @@
   "info": {
     "title": "Treegens Mangrove Counting API",
     "version": "v2-beta",
-    "description": "Submit a field walkthrough video of a mangrove planting site and get back a deduplicated count of unique trees, an annotated video, and a top-down spatial map. Processing is asynchronous: submit a video, receive a job id, poll until the job is done. Counts are unique tracked trees, not per-frame detections; uncertain results are flagged for human review."
+    "description": "Submit a field walkthrough video of a mangrove planting site and get back a deduplicated count of unique trees, an annotated video, and a top-down spatial map. Default is a single request: POST a video and the response body carries the full result (no polling). The request stays open for the processing time (about 30 to 90 seconds), so set a read timeout of a few minutes. For unusually long videos, pass ?async=true to get a job id to poll instead. Counts are unique tracked trees, not per-frame detections; uncertain results are flagged for human review."
   },
   "servers": [
     { "url": "https://cy6erlizard--treegens-motion-memory-web.modal.run", "description": "Production (Modal, GPU L4)" }
@@ -12,10 +12,11 @@
     "/visits/{visit_id}/videos": {
       "post": {
         "operationId": "submitVideo",
-        "summary": "Submit a video for a visit",
-        "description": "Upload one video as multipart form data under the field name 'video'. Returns immediately with a job id; processing runs in the background.",
+        "summary": "Submit a video and get the result",
+        "description": "Upload one video as multipart form data under the field name 'video'. By default the request waits for processing and returns the full result in the response (single request, no polling); keep a read timeout of a few minutes. Pass ?async=true to return a job id to poll instead (for very long videos).",
         "parameters": [
-          { "name": "visit_id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Your identifier for the site visit; echoed back on the job." }
+          { "name": "visit_id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Your identifier for the site visit; echoed back on the response." },
+          { "name": "async", "in": "query", "required": false, "schema": { "type": "boolean", "default": false }, "description": "When true, return a job id to poll (202) instead of waiting for the result." }
         ],
         "requestBody": {
           "required": true,
@@ -30,8 +31,12 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Default single-request mode: processing finished, body carries the full result.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Job" } } }
+          },
           "202": {
-            "description": "Accepted; job created.",
+            "description": "Async mode (?async=true): job accepted; poll GET /jobs/{job_id}.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JobAccepted" } } }
           },
           "400": { "description": "Missing or empty 'video' field." }
